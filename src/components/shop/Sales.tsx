@@ -122,7 +122,7 @@ export const Sales = ({ products }: SalesProps) => {
     // Here you would normally update the database and reduce stock
     toast({
       title: "Sale Completed",
-      description: `Total: $${totalAmount.toFixed(2)} | Profit: $${totalProfit.toFixed(2)}`,
+      description: `Total: KSh ${totalAmount.toFixed(2)} | Profit: KSh ${totalProfit.toFixed(2)}`,
     });
 
     setCart([]);
@@ -175,7 +175,7 @@ export const Sales = ({ products }: SalesProps) => {
                           {product.currentStock} left
                         </Badge>
                         <Badge variant="secondary" className="font-receipt text-xs">
-                          ${product.sellingPrice}
+                          KSh {product.sellingPrice}
                         </Badge>
                       </div>
                     </div>
@@ -223,7 +223,7 @@ export const Sales = ({ products }: SalesProps) => {
                 <div className="flex justify-between">
                   <span>Subtotal:</span>
                   <span className="font-receipt">
-                    ${((parseFloat(quantity) || 0) * 
+                    KSh {((parseFloat(quantity) || 0) * 
                         (customPrice ? parseFloat(customPrice) : selectedProductDetails.sellingPrice)
                       ).toFixed(2)}
                   </span>
@@ -231,7 +231,7 @@ export const Sales = ({ products }: SalesProps) => {
                 <div className="flex justify-between text-success">
                   <span>Profit:</span>
                   <span className="font-receipt">
-                    ${((parseFloat(quantity) || 0) * 
+                    KSh {((parseFloat(quantity) || 0) * 
                         ((customPrice ? parseFloat(customPrice) : selectedProductDetails.sellingPrice) - 
                          selectedProductDetails.costPrice)
                       ).toFixed(2)}
@@ -264,12 +264,12 @@ export const Sales = ({ products }: SalesProps) => {
                   <div className="flex-1">
                     <p className="text-sm font-medium">{item.productName}</p>
                     <p className="text-xs text-muted-foreground">
-                      {item.quantity} × ${item.unitPrice.toFixed(2)}
+                      {item.quantity} × KSh {item.unitPrice.toFixed(2)}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="font-receipt font-semibold">
-                      ${(item.quantity * item.unitPrice).toFixed(2)}
+                      KSh {(item.quantity * item.unitPrice).toFixed(2)}
                     </span>
                     <Button
                       variant="outline"
@@ -287,11 +287,11 @@ export const Sales = ({ products }: SalesProps) => {
             <div className="space-y-2 pt-2 border-t border-border">
               <div className="flex justify-between font-semibold">
                 <span>Total:</span>
-                <span className="font-receipt text-lg">${cartTotal.toFixed(2)}</span>
+                <span className="font-receipt text-lg">KSh {cartTotal.toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-success">
                 <span>Expected Profit:</span>
-                <span className="font-receipt">${cartProfit.toFixed(2)}</span>
+                <span className="font-receipt">KSh {cartProfit.toFixed(2)}</span>
               </div>
             </div>
 
@@ -327,7 +327,7 @@ export const Sales = ({ products }: SalesProps) => {
                       {product.currentStock} left
                     </Badge>
                     <Badge className="font-receipt text-xs">
-                      ${product.sellingPrice}
+                      KSh {product.sellingPrice}
                     </Badge>
                   </div>
                 </div>
