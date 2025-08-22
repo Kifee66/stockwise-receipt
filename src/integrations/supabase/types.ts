@@ -14,7 +14,148 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      products: {
+        Row: {
+          category: string | null
+          cost_price: number
+          created_at: string
+          current_stock: number
+          id: string
+          last_restocked: string | null
+          low_stock_threshold: number
+          name: string
+          selling_price: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          category?: string | null
+          cost_price?: number
+          created_at?: string
+          current_stock?: number
+          id?: string
+          last_restocked?: string | null
+          low_stock_threshold?: number
+          name: string
+          selling_price?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          category?: string | null
+          cost_price?: number
+          created_at?: string
+          current_stock?: number
+          id?: string
+          last_restocked?: string | null
+          low_stock_threshold?: number
+          name?: string
+          selling_price?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      restocks: {
+        Row: {
+          created_at: string
+          date: string
+          id: string
+          notes: string | null
+          product_id: string
+          quantity: number
+          receipt_url: string | null
+          total_cost: number | null
+          unit_cost: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          date?: string
+          id?: string
+          notes?: string | null
+          product_id: string
+          quantity: number
+          receipt_url?: string | null
+          total_cost?: number | null
+          unit_cost?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          date?: string
+          id?: string
+          notes?: string | null
+          product_id?: string
+          quantity?: number
+          receipt_url?: string | null
+          total_cost?: number | null
+          unit_cost?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "restocks_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sales: {
+        Row: {
+          created_at: string
+          date: string
+          id: string
+          product_id: string
+          product_name: string
+          profit: number
+          quantity: number
+          total_amount: number
+          unit_price: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          date?: string
+          id?: string
+          product_id: string
+          product_name: string
+          profit: number
+          quantity: number
+          total_amount: number
+          unit_price: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          date?: string
+          id?: string
+          product_id?: string
+          product_name?: string
+          profit?: number
+          quantity?: number
+          total_amount?: number
+          unit_price?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sales_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never

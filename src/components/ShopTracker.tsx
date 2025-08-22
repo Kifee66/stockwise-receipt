@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
@@ -8,6 +8,8 @@ import { Dashboard } from "./shop/Dashboard";
 import { Restocking } from "./shop/Restocking";
 import { Sales } from "./shop/Sales";
 import { Reports } from "./shop/Reports";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 interface Product {
   id: string;
@@ -42,66 +44,128 @@ interface StockMovement {
 }
 
 export const ShopTracker = () => {
+  const { toast } = useToast();
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [pendingSyncs, setPendingSyncs] = useState(0);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [sales, setSales] = useState<Sale[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<any>(null);
   
-  // Sample data for demonstration
-  const [products] = useState<Product[]>([
-    {
-      id: "1",
-      name: "Premium Coffee Beans",
-      category: "Beverages",
-      currentStock: 25,
-      lowStockThreshold: 10,
-      costPrice: 8.50,
-      sellingPrice: 15.00,
-      lastRestocked: new Date(2024, 7, 20)
-    },
-    {
-      id: "2", 
-      name: "Organic Green Tea",
-      category: "Beverages",
-      currentStock: 5,
-      lowStockThreshold: 15,
-      costPrice: 4.00,
-      sellingPrice: 8.50,
-      lastRestocked: new Date(2024, 7, 18)
-    },
-    {
-      id: "3",
-      name: "Artisan Chocolate",
-      category: "Confectionery",
-      currentStock: 40,
-      lowStockThreshold: 20,
-      costPrice: 3.25,
-      sellingPrice: 6.99,
-      lastRestocked: new Date(2024, 7, 22)
+  // Check auth status
+  useEffect(() => {
+    const checkAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      setUser(session?.user || null);
+    };
+    
+    checkAuth();
+    
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      setUser(session?.user || null);
+    });
+    
+    return () => subscription.unsubscribe();
+  }, []);
+  
+  // Fetch products from Supabase
+  const fetchProducts = async () => {
+    if (!user) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('products')
+        .select('*')
+        .order('name');
+      
+      if (error) throw error;
+      
+      const transformedProducts: Product[] = data.map(p => ({
+        id: p.id,
+        name: p.name,
+        category: p.category || 'Uncategorized',
+        currentStock: p.current_stock,
+        lowStockThreshold: p.low_stock_threshold,
+        costPrice: Number(p.cost_price),
+        sellingPrice: Number(p.selling_price),
+        lastRestocked: p.last_restocked ? new Date(p.last_restocked) : undefined
+      }));
+      
+      setProducts(transformedProducts);
+    } catch (error) {
+      console.error('Error fetching products:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load products. Please try again.",
+        variant: "destructive"
+      });
     }
-  ]);
+  };
 
-  const [sales] = useState<Sale[]>([
-    {
-      id: "1",
-      productId: "1",
-      productName: "Premium Coffee Beans",
-      quantity: 3,
-      unitPrice: 15.00,
-      totalAmount: 45.00,
-      profit: 19.50,
-      date: new Date(2024, 7, 21)
-    },
-    {
-      id: "2",
-      productId: "3", 
-      productName: "Artisan Chocolate",
-      quantity: 5,
-      unitPrice: 6.99,
-      totalAmount: 34.95,
-      profit: 18.70,
-      date: new Date(2024, 7, 21)
+  // Fetch sales from Supabase
+  const fetchSales = async () => {
+    if (!user) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('sales')
+        .select('*')
+        .order('date', { ascending: false });
+      
+      if (error) throw error;
+      
+      const transformedSales: Sale[] = data.map(s => ({
+        id: s.id,
+        productId: s.product_id,
+        productName: s.product_name,
+        quantity: s.quantity,
+        unitPrice: Number(s.unit_price),
+        totalAmount: Number(s.total_amount),
+        profit: Number(s.profit),
+        date: new Date(s.date)
+      }));
+      
+      setSales(transformedSales);
+    } catch (error) {
+      console.error('Error fetching sales:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load sales data. Please try again.",
+        variant: "destructive"
+      });
     }
-  ]);
+  };
 
+  // Load data when user is authenticated
+  useEffect(() => {
+    if (user) {
+      const loadData = async () => {
+        setLoading(true);
+        await Promise.all([fetchProducts(), fetchSales()]);
+        setLoading(false);
+      };
+      
+      loadData();
+    } else {
+      setLoading(false);
+    }
+  }, [user]);
+
+  // Listen for network status changes
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  // Calculate metrics
   const totalValue = products.reduce((sum, product) => 
     sum + (product.currentStock * product.costPrice), 0
   );
@@ -117,6 +181,39 @@ export const ShopTracker = () => {
   const lowStockProducts = products.filter(product => 
     product.currentStock <= product.lowStockThreshold
   );
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background p-4 max-w-md mx-auto flex items-center justify-center">
+        <div className="text-center">
+          <Package className="w-8 h-8 animate-pulse mx-auto mb-2 text-primary" />
+          <p className="text-muted-foreground">Loading shop data...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-background p-4 max-w-md mx-auto flex items-center justify-center">
+        <Card className="shadow-receipt">
+          <CardContent className="p-6 text-center">
+            <Package className="w-12 h-12 mx-auto mb-4 text-primary" />
+            <h2 className="text-xl font-bold mb-2">Shop Tracker</h2>
+            <p className="text-muted-foreground mb-4">
+              Please sign in to access your shop data and manage your inventory.
+            </p>
+            <Button onClick={() => toast({
+              title: "Authentication Required",
+              description: "Please implement authentication to continue.",
+            })}>
+              Sign In
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background p-4 max-w-md mx-auto">
