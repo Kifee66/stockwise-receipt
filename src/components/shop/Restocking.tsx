@@ -178,7 +178,7 @@ export const Restocking = ({ products }: RestockingProps) => {
               <div className="flex justify-between text-sm">
                 <span>Total Cost:</span>
                 <span className="font-receipt font-semibold">
-                  ${(parseFloat(quantity) * parseFloat(costPrice)).toFixed(2)}
+                  KSh {(parseFloat(quantity) * parseFloat(costPrice)).toFixed(2)}
                 </span>
               </div>
             </div>

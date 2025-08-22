@@ -166,7 +166,7 @@ export const Reports = ({ sales }: ReportsProps) => {
               <div>
                 <p className="text-xs text-muted-foreground">Revenue</p>
                 <p className="font-receipt text-lg font-semibold text-success">
-                  ${reportData.totalRevenue.toFixed(2)}
+                  KSh {reportData.totalRevenue.toFixed(2)}
                 </p>
               </div>
             </div>
@@ -180,7 +180,7 @@ export const Reports = ({ sales }: ReportsProps) => {
               <div>
                 <p className="text-xs text-muted-foreground">Profit</p>
                 <p className="font-receipt text-lg font-semibold text-primary">
-                  ${reportData.totalProfit.toFixed(2)}
+                  KSh {reportData.totalProfit.toFixed(2)}
                 </p>
               </div>
             </div>
@@ -208,7 +208,7 @@ export const Reports = ({ sales }: ReportsProps) => {
           <div className="pt-3 border-t border-border">
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Average Order Value</span>
-              <span className="font-receipt font-semibold">${reportData.averageOrder.toFixed(2)}</span>
+              <span className="font-receipt font-semibold">KSh {reportData.averageOrder.toFixed(2)}</span>
             </div>
             <div className="flex justify-between text-sm mt-1">
               <span className="text-muted-foreground">Profit Margin</span>
@@ -245,7 +245,7 @@ export const Reports = ({ sales }: ReportsProps) => {
                     </div>
                   </div>
                   <span className="font-receipt font-semibold text-success">
-                    ${product.revenue.toFixed(2)}
+                    KSh {product.revenue.toFixed(2)}
                   </span>
                 </div>
               ))}
@@ -271,12 +271,12 @@ export const Reports = ({ sales }: ReportsProps) => {
                   <div>
                     <p className="text-sm font-medium">{sale.productName}</p>
                     <p className="text-xs text-muted-foreground">
-                      {sale.quantity} × ${sale.unitPrice.toFixed(2)} • {format(sale.date, "MMM d, h:mm a")}
+                      {sale.quantity} × KSh {sale.unitPrice.toFixed(2)} • {format(sale.date, "MMM d, h:mm a")}
                     </p>
                   </div>
                   <div className="text-right">
-                    <p className="font-receipt font-semibold text-success">${sale.totalAmount.toFixed(2)}</p>
-                    <p className="text-xs text-muted-foreground">+${sale.profit.toFixed(2)}</p>
+                    <p className="font-receipt font-semibold text-success">KSh {sale.totalAmount.toFixed(2)}</p>
+                    <p className="text-xs text-muted-foreground">+KSh {sale.profit.toFixed(2)}</p>
                   </div>
                 </div>
               ))}

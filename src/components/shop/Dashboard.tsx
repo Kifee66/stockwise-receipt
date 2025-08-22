@@ -58,15 +58,15 @@ export const Dashboard = ({ products, sales, totalValue, todaysSales, todaysProf
           <CardContent className="space-y-3">
             <div className="flex justify-between">
               <span className="text-xs text-muted-foreground">Sales Revenue</span>
-              <span className="font-receipt font-semibold text-success">${todaysSales.toFixed(2)}</span>
+              <span className="font-receipt font-semibold text-success">KSh {todaysSales.toFixed(2)}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-xs text-muted-foreground">Profit Earned</span>
-              <span className="font-receipt font-semibold text-success">${todaysProfit.toFixed(2)}</span>
+              <span className="font-receipt font-semibold text-success">KSh {todaysProfit.toFixed(2)}</span>
             </div>
             <div className="flex justify-between border-t border-border pt-2">
               <span className="text-xs text-muted-foreground">Total Inventory</span>
-              <span className="font-receipt font-semibold">${totalValue.toFixed(2)}</span>
+              <span className="font-receipt font-semibold">KSh {totalValue.toFixed(2)}</span>
             </div>
           </CardContent>
         </Card>
@@ -115,11 +115,11 @@ export const Dashboard = ({ products, sales, totalValue, todaysSales, todaysProf
                   <div>
                     <p className="text-sm font-medium">{sale.productName}</p>
                     <p className="text-xs text-muted-foreground">
-                      {sale.quantity} × ${sale.unitPrice.toFixed(2)}
+                      {sale.quantity} × KSh {sale.unitPrice.toFixed(2)}
                     </p>
                   </div>
                   <div className="text-right">
-                    <p className="font-receipt font-semibold text-success">${sale.totalAmount.toFixed(2)}</p>
+                    <p className="font-receipt font-semibold text-success">KSh {sale.totalAmount.toFixed(2)}</p>
                     <p className="text-xs text-muted-foreground">
                       {sale.date.toLocaleDateString()}
                     </p>
@@ -159,7 +159,7 @@ export const Dashboard = ({ products, sales, totalValue, todaysSales, todaysProf
                     {product.currentStock} in stock
                   </Badge>
                   <p className="text-xs text-muted-foreground mt-1">
-                    ${(product.currentStock * product.costPrice).toFixed(2)} value
+                    KSh {(product.currentStock * product.costPrice).toFixed(2)} value
                   </p>
                 </div>
               </div>
