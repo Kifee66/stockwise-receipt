@@ -10,6 +10,7 @@ import { Sales } from "./shop/Sales";
 import { Reports } from "./shop/Reports";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useNavigate } from "react-router-dom";
 
 interface Product {
   id: string;
@@ -45,6 +46,7 @@ interface StockMovement {
 
 export const ShopTracker = () => {
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [pendingSyncs, setPendingSyncs] = useState(0);
   const [products, setProducts] = useState<Product[]>([]);
@@ -203,10 +205,7 @@ export const ShopTracker = () => {
             <p className="text-muted-foreground mb-4">
               Please sign in to access your shop data and manage your inventory.
             </p>
-            <Button onClick={() => toast({
-              title: "Authentication Required",
-              description: "Please implement authentication to continue.",
-            })}>
+            <Button onClick={() => navigate('/auth')}>
               Sign In
             </Button>
           </CardContent>
@@ -234,6 +233,16 @@ export const ShopTracker = () => {
               {pendingSyncs} pending
             </Badge>
           )}
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={async () => {
+              await supabase.auth.signOut();
+              toast({ title: "Signed Out", description: "You have been signed out successfully." });
+            }}
+          >
+            Sign Out
+          </Button>
         </div>
       </div>
 
