@@ -237,16 +237,21 @@ export const ShopTracker = () => {
         </TabsContent>
 
         <TabsContent value="sales">
-          <Sales products={products.map(p => ({
-            id: p.id,
-            name: p.name,
-            category: p.category || "",
-            currentStock: p.current_stock,
-            lowStockThreshold: p.low_stock_threshold || 0,
-            costPrice: p.cost_price,
-            sellingPrice: p.selling_price,
-            lastRestocked: undefined
-          }))} />
+          {productManager && salesManager ? (
+            <Sales 
+              products={products}
+              salesManager={salesManager}
+              productManager={productManager}
+              onSaleComplete={refreshData}
+            />
+          ) : (
+            <Card className="shadow-receipt">
+              <CardContent className="p-6 text-center">
+                <Package className="w-8 h-8 animate-pulse mx-auto mb-2 text-primary" />
+                <p className="text-muted-foreground">Initializing sales system...</p>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         <TabsContent value="reports">

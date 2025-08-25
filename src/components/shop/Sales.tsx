@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,20 +7,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { ShoppingCart, Camera, Calculator, Search, DollarSign } from "lucide-react";
-
-interface Product {
-  id: string;
-  name: string;
-  category: string;
-  currentStock: number;
-  lowStockThreshold: number;
-  costPrice: number;
-  sellingPrice: number;
-  lastRestocked?: Date;
-}
+import { type Product, type PaymentMethod } from "@/types/business";
+import { SalesManager } from "@/managers/SalesManager";
+import { ProductManager } from "@/managers/ProductManager";
 
 interface SalesProps {
   products: Product[];
+  salesManager?: SalesManager;
+  productManager?: ProductManager;
+  onSaleComplete?: () => void;
 }
 
 interface SaleItem {
@@ -31,7 +26,7 @@ interface SaleItem {
   costPrice: number;
 }
 
-export const Sales = ({ products }: SalesProps) => {
+export const Sales = ({ products, salesManager, productManager, onSaleComplete }: SalesProps) => {
   const { toast } = useToast();
   const [selectedProduct, setSelectedProduct] = useState<string>("");
   const [quantity, setQuantity] = useState<string>("");
@@ -41,9 +36,9 @@ export const Sales = ({ products }: SalesProps) => {
 
   // Filter products based on search term and availability
   const availableProducts = products.filter(product =>
-    product.currentStock > 0 &&
+    product.current_stock > 0 &&
     (product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-     product.category.toLowerCase().includes(searchTerm.toLowerCase()))
+     (product.category || "").toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   const selectedProductDetails = products.find(p => p.id === selectedProduct);
@@ -62,16 +57,16 @@ export const Sales = ({ products }: SalesProps) => {
     if (!product) return;
 
     const qty = parseInt(quantity);
-    if (qty > product.currentStock) {
+    if (qty > product.current_stock) {
       toast({
         title: "Insufficient Stock",
-        description: `Only ${product.currentStock} units available`,
+        description: `Only ${product.current_stock} units available`,
         variant: "destructive"
       });
       return;
     }
 
-    const unitPrice = customPrice ? parseFloat(customPrice) : product.sellingPrice;
+    const unitPrice = customPrice ? parseFloat(customPrice) : product.selling_price;
 
     const existingItemIndex = cart.findIndex(item => item.productId === selectedProduct);
     
@@ -85,7 +80,7 @@ export const Sales = ({ products }: SalesProps) => {
         productName: product.name,
         quantity: qty,
         unitPrice: unitPrice,
-        costPrice: product.costPrice
+        costPrice: product.cost_price
       };
       setCart([...cart, newItem]);
     }
@@ -105,7 +100,7 @@ export const Sales = ({ products }: SalesProps) => {
     setCart(cart.filter(item => item.productId !== productId));
   };
 
-  const completeSale = () => {
+  const completeSale = async () => {
     if (cart.length === 0) {
       toast({
         title: "Empty Cart",
@@ -115,17 +110,59 @@ export const Sales = ({ products }: SalesProps) => {
       return;
     }
 
-    const totalAmount = cart.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
-    const totalCost = cart.reduce((sum, item) => sum + (item.quantity * item.costPrice), 0);
-    const totalProfit = totalAmount - totalCost;
+    if (!salesManager || !productManager) {
+      toast({
+        title: "System Error",
+        description: "Sales system not properly initialized",
+        variant: "destructive"
+      });
+      return;
+    }
 
-    // Here you would normally update the database and reduce stock
-    toast({
-      title: "Sale Completed",
-      description: `Total: KSh ${totalAmount.toFixed(2)} | Profit: KSh ${totalProfit.toFixed(2)}`,
-    });
+    try {
+      // Record the sale using SalesManager
+      const saleItems = cart.map(item => {
+        const product = products.find(p => p.id === item.productId);
+        return {
+          product: product!,
+          quantity: item.quantity,
+          price: item.unitPrice
+        };
+      });
 
-    setCart([]);
+      const result = await salesManager.recordSale({
+        items: saleItems,
+        payment_method: "cash" as PaymentMethod,
+        staff_id: undefined,
+        customer: null
+      });
+
+      if (result.success) {
+        const totalAmount = cart.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
+        const totalProfit = cart.reduce((sum, item) => sum + (item.quantity * (item.unitPrice - item.costPrice)), 0);
+
+        toast({
+          title: "Sale Completed",
+          description: `Total: KSh ${totalAmount.toFixed(2)} | Profit: KSh ${totalProfit.toFixed(2)}`,
+        });
+
+        setCart([]);
+        onSaleComplete?.();
+      } else {
+        toast({
+          title: "Sale Failed",
+          description: result.error || "Failed to process sale",
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
+      console.error("Sale error:", error);
+      toast({
+        title: "Sale Failed",
+        description: "An error occurred while processing the sale",
+        variant: "destructive"
+      });
+    }
   };
 
   const cartTotal = cart.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
@@ -172,10 +209,10 @@ export const Sales = ({ products }: SalesProps) => {
                       <span>{product.name}</span>
                       <div className="flex gap-1 ml-2">
                         <Badge variant="outline" className="font-receipt text-xs">
-                          {product.currentStock} left
+                          {product.current_stock} left
                         </Badge>
                         <Badge variant="secondary" className="font-receipt text-xs">
-                          KSh {product.sellingPrice}
+                          KSh {product.selling_price}
                         </Badge>
                       </div>
                     </div>
@@ -195,11 +232,11 @@ export const Sales = ({ products }: SalesProps) => {
                 value={quantity}
                 onChange={(e) => setQuantity(e.target.value)}
                 className="font-receipt"
-                max={selectedProductDetails?.currentStock || 0}
+                max={selectedProductDetails?.current_stock || 0}
               />
               {selectedProductDetails && quantity && (
                 <p className="text-xs text-muted-foreground">
-                  {selectedProductDetails.currentStock} available
+                  {selectedProductDetails.current_stock} available
                 </p>
               )}
             </div>
@@ -209,7 +246,7 @@ export const Sales = ({ products }: SalesProps) => {
                 id="price"
                 type="number"
                 step="0.01"
-                placeholder={selectedProductDetails?.sellingPrice.toFixed(2) || "0.00"}
+                placeholder={selectedProductDetails?.selling_price.toFixed(2) || "0.00"}
                 value={customPrice}
                 onChange={(e) => setCustomPrice(e.target.value)}
                 className="font-receipt"
@@ -224,7 +261,7 @@ export const Sales = ({ products }: SalesProps) => {
                   <span>Subtotal:</span>
                   <span className="font-receipt">
                     KSh {((parseFloat(quantity) || 0) * 
-                        (customPrice ? parseFloat(customPrice) : selectedProductDetails.sellingPrice)
+                        (customPrice ? parseFloat(customPrice) : selectedProductDetails.selling_price)
                       ).toFixed(2)}
                   </span>
                 </div>
@@ -232,8 +269,8 @@ export const Sales = ({ products }: SalesProps) => {
                   <span>Profit:</span>
                   <span className="font-receipt">
                     KSh {((parseFloat(quantity) || 0) * 
-                        ((customPrice ? parseFloat(customPrice) : selectedProductDetails.sellingPrice) - 
-                         selectedProductDetails.costPrice)
+                        ((customPrice ? parseFloat(customPrice) : selectedProductDetails.selling_price) - 
+                         selectedProductDetails.cost_price)
                       ).toFixed(2)}
                   </span>
                 </div>
@@ -324,10 +361,10 @@ export const Sales = ({ products }: SalesProps) => {
                   </div>
                   <div className="flex items-center gap-2">
                     <Badge variant="outline" className="font-receipt text-xs">
-                      {product.currentStock} left
+                      {product.current_stock} left
                     </Badge>
                     <Badge className="font-receipt text-xs">
-                      KSh {product.sellingPrice}
+                      KSh {product.selling_price}
                     </Badge>
                   </div>
                 </div>
