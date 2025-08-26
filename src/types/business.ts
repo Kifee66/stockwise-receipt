@@ -41,6 +41,8 @@ export interface Customer {
   phone?: string;
 }
 
+export type SaleStatus = "completed" | "reversed";
+
 export interface Sale {
   id: UUID;
   date: string; // ISO
@@ -50,6 +52,7 @@ export interface Sale {
   staff_id?: UUID | null;
   customer?: Customer | null;
   receipt?: Receipt | null;
+  status: SaleStatus;
 }
 
 export type StockMovementType = "restock" | "sale" | "adjustment";
@@ -86,8 +89,43 @@ export interface BusinessSettings {
   default_currency: string; // e.g. KES
   timezone: string; // IANA
   backup: BackupPreferences;
+  reversal_window_hours: number; // Allow reversal within X hours
   created_at: string; // ISO
   updated_at: string; // ISO
+}
+
+export interface AuditLog {
+  id: UUID;
+  action: string; // 'reverse', 'restore', 'backup', 'import'
+  entity_type: string; // 'sale', 'product', 'database'
+  entity_id?: UUID | null;
+  staff_id?: UUID | null;
+  reason?: string | null;
+  timestamp: string; // ISO
+  metadata?: Record<string, any> | null;
+}
+
+export interface AppCounter {
+  id: string; // 'receipts', 'sales', etc.
+  value: number;
+  last_updated: string; // ISO
+}
+
+export interface BackupSnapshot {
+  schemaVersion: number;
+  backupVersion: string;
+  timestamp: string;
+  counters: Record<string, number>;
+  tables: {
+    products: Product[];
+    sales: Sale[];
+    stock_movements: StockMovement[];
+    staff: Staff[];
+    business_settings: BusinessSettings[];
+    audit_logs: AuditLog[];
+    counters: AppCounter[];
+  };
+  checksum: string;
 }
 
 // Zod Schemas for validation
@@ -134,6 +172,24 @@ export const saleSchema = z.object({
     .optional()
     .nullable(),
   receipt: receiptSchema.optional().nullable(),
+  status: z.enum(["completed", "reversed"]),
+});
+
+export const auditLogSchema = z.object({
+  id: z.string().uuid(),
+  action: z.string().min(1),
+  entity_type: z.string().min(1),
+  entity_id: z.string().uuid().optional().nullable(),
+  staff_id: z.string().uuid().optional().nullable(),
+  reason: z.string().optional().nullable(),
+  timestamp: z.string(),
+  metadata: z.record(z.any()).optional().nullable(),
+});
+
+export const counterSchema = z.object({
+  id: z.string().min(1),
+  value: z.number().int().nonnegative(),
+  last_updated: z.string(),
 });
 
 export const stockMovementSchema = z.object({
@@ -164,6 +220,7 @@ export const settingsSchema = z.object({
     frequency: z.enum(["daily", "weekly", "monthly"]),
     last_run_at: z.string().optional().nullable(),
   }),
+  reversal_window_hours: z.number().int().min(1).max(168), // 1 hour to 1 week
   created_at: z.string(),
   updated_at: z.string(),
 });
@@ -173,4 +230,6 @@ export type StoreName =
   | "sales"
   | "stock_movements"
   | "staff"
-  | "business_settings";
+  | "business_settings"
+  | "audit_logs"
+  | "counters";

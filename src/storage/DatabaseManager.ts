@@ -45,6 +45,7 @@ export class DatabaseManager {
           sales.createIndex("date", "date", { unique: false });
           sales.createIndex("payment_method", "payment_method", { unique: false });
           sales.createIndex("staff_id", "staff_id", { unique: false });
+          sales.createIndex("status", "status", { unique: false });
 
           // stock_movements
           const stock = db.createObjectStore("stock_movements", { keyPath: "id" });
@@ -62,6 +63,18 @@ export class DatabaseManager {
           const settings = db.createObjectStore("business_settings", { keyPath: "id" });
           settings.createIndex("business_name", "business_name", { unique: false });
           settings.createIndex("updated_at", "updated_at", { unique: false });
+
+          // audit_logs
+          const auditLogs = db.createObjectStore("audit_logs", { keyPath: "id" });
+          auditLogs.createIndex("timestamp", "timestamp", { unique: false });
+          auditLogs.createIndex("action", "action", { unique: false });
+          auditLogs.createIndex("entity_type", "entity_type", { unique: false });
+          auditLogs.createIndex("entity_id", "entity_id", { unique: false });
+          auditLogs.createIndex("staff_id", "staff_id", { unique: false });
+
+          // counters
+          const counters = db.createObjectStore("counters", { keyPath: "id" });
+          counters.createIndex("last_updated", "last_updated", { unique: false });
         }
       };
 

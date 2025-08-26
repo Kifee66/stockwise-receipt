@@ -1,0 +1,74 @@
+import { VitePWA } from 'vite-plugin-pwa';
+
+export const pwaConfig = VitePWA({
+  registerType: 'autoUpdate',
+  workbox: {
+    globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+    runtimeCaching: [
+      {
+        urlPattern: ({ request }) => request.destination === 'document',
+        handler: 'CacheFirst',
+        options: {
+          cacheName: 'html-cache',
+          expiration: {
+            maxEntries: 10,
+            maxAgeSeconds: 60 * 60 * 24 * 30, // 30 days
+          },
+        },
+      },
+      {
+        urlPattern: ({ request }) => 
+          request.destination === 'script' || request.destination === 'style',
+        handler: 'CacheFirst',
+        options: {
+          cacheName: 'assets-cache',
+          expiration: {
+            maxEntries: 60,
+            maxAgeSeconds: 60 * 60 * 24 * 30, // 30 days
+          },
+        },
+      },
+    ],
+  },
+  manifest: {
+    name: 'Shop Tracker - Stock & Sales Management',
+    short_name: 'Shop Tracker',
+    description: 'Modern PWA for shop stock tracking, sales management, and inventory control with offline support',
+    start_url: '/',
+    display: 'standalone',
+    background_color: '#fdf8f1',
+    theme_color: '#2E86C1',
+    orientation: 'portrait-primary',
+    categories: ['business', 'productivity', 'utilities'],
+    icons: [
+      {
+        src: '/placeholder.svg',
+        sizes: '192x192',
+        type: 'image/svg+xml',
+        purpose: 'any maskable',
+      },
+      {
+        src: '/placeholder.svg',
+        sizes: '512x512',
+        type: 'image/svg+xml',
+        purpose: 'any maskable',
+      },
+    ],
+    shortcuts: [
+      {
+        name: 'Add Sale',
+        short_name: 'Sale',
+        description: 'Record a new sale transaction',
+        url: '/?tab=sales',
+        icons: [{ src: '/placeholder.svg', sizes: '96x96' }],
+      },
+      {
+        name: 'Restock Items',
+        short_name: 'Restock',
+        description: 'Add new inventory stock',
+        url: '/?tab=restock',
+        icons: [{ src: '/placeholder.svg', sizes: '96x96' }],
+      },
+    ],
+  },
+});

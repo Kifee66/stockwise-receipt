@@ -6,3 +6,12 @@ export function formatKsh(amount: number) {
     return `KSh ${amount.toFixed(2)}`;
   }
 }
+
+export function formatCurrency(amount: number, currency = "KES") {
+  return new Intl.NumberFormat("en-KE", {
+    style: "currency",
+    currency,
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }).format(amount);
+}

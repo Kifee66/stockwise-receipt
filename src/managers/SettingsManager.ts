@@ -25,6 +25,7 @@ export class SettingsManager {
       default_currency: input.default_currency,
       timezone: input.timezone,
       backup: input.backup,
+      reversal_window_hours: input.reversal_window_hours || 24,
       created_at: (base.created_at as string) ?? nowISO(),
       updated_at: nowISO(),
     };
