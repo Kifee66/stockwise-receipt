@@ -8,150 +8,47 @@ import { Dashboard } from "./shop/Dashboard";
 import { Restocking } from "./shop/Restocking";
 import { Sales } from "./shop/Sales";
 import { Reports } from "./shop/Reports";
-import { supabase } from "@/integrations/supabase/client";
+import { useShopData } from "@/hooks/useShopData";
+import { StockManager } from "@/managers/StockManager";
+import { DatabaseManager } from "@/storage/DatabaseManager";
+import { StorageService } from "@/storage/StorageService";
 import { useToast } from "@/hooks/use-toast";
-import { useNavigate } from "react-router-dom";
 
-interface Product {
-  id: string;
-  name: string;
-  category: string;
-  currentStock: number;
-  lowStockThreshold: number;
-  costPrice: number;
-  sellingPrice: number;
-  lastRestocked?: Date;
-}
-
-interface Sale {
-  id: string;
-  productId: string;
-  productName: string;
-  quantity: number;
-  unitPrice: number;
-  totalAmount: number;
-  profit: number;
-  date: Date;
-}
-
-interface StockMovement {
-  id: string;
-  productId: string;
-  productName: string;
-  quantity: number;
-  type: 'restock' | 'sale';
-  date: Date;
-  notes?: string;
-}
+// Get client ID for IndexedDB
+const getClientId = () => {
+  let clientId = localStorage.getItem('shop_client_id');
+  if (!clientId) {
+    clientId = Math.random().toString(36).substring(2, 15);
+    localStorage.setItem('shop_client_id', clientId);
+  }
+  return clientId;
+};
 
 export const ShopTracker = () => {
   const { toast } = useToast();
-  const navigate = useNavigate();
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [pendingSyncs, setPendingSyncs] = useState(0);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [sales, setSales] = useState<Sale[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [user, setUser] = useState<any>(null);
+  const [stockManager, setStockManager] = useState<StockManager | null>(null);
   
-  // Check auth status
+  // Use our custom hook for shop data
+  const { products, sales, loading, productManager, salesManager, refreshData } = useShopData();
+  
+  // Initialize stock manager
   useEffect(() => {
-    const checkAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      setUser(session?.user || null);
+    const initStockManager = async () => {
+      try {
+        const clientId = getClientId();
+        const dbManager = new DatabaseManager(clientId);
+        const storageService = new StorageService(dbManager);
+        const stockMgr = new StockManager(storageService);
+        setStockManager(stockMgr);
+      } catch (error) {
+        console.error('Failed to initialize stock manager:', error);
+      }
     };
-    
-    checkAuth();
-    
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      setUser(session?.user || null);
-    });
-    
-    return () => subscription.unsubscribe();
+
+    initStockManager();
   }, []);
-  
-  // Fetch products from Supabase
-  const fetchProducts = async () => {
-    if (!user) return;
-    
-    try {
-      const { data, error } = await supabase
-        .from('products')
-        .select('*')
-        .order('name');
-      
-      if (error) throw error;
-      
-      const transformedProducts: Product[] = data.map(p => ({
-        id: p.id,
-        name: p.name,
-        category: p.category || 'Uncategorized',
-        currentStock: p.current_stock,
-        lowStockThreshold: p.low_stock_threshold,
-        costPrice: Number(p.cost_price),
-        sellingPrice: Number(p.selling_price),
-        lastRestocked: p.last_restocked ? new Date(p.last_restocked) : undefined
-      }));
-      
-      setProducts(transformedProducts);
-    } catch (error) {
-      console.error('Error fetching products:', error);
-      toast({
-        title: "Error",
-        description: "Failed to load products. Please try again.",
-        variant: "destructive"
-      });
-    }
-  };
-
-  // Fetch sales from Supabase
-  const fetchSales = async () => {
-    if (!user) return;
-    
-    try {
-      const { data, error } = await supabase
-        .from('sales')
-        .select('*')
-        .order('date', { ascending: false });
-      
-      if (error) throw error;
-      
-      const transformedSales: Sale[] = data.map(s => ({
-        id: s.id,
-        productId: s.product_id,
-        productName: s.product_name,
-        quantity: s.quantity,
-        unitPrice: Number(s.unit_price),
-        totalAmount: Number(s.total_amount),
-        profit: Number(s.profit),
-        date: new Date(s.date)
-      }));
-      
-      setSales(transformedSales);
-    } catch (error) {
-      console.error('Error fetching sales:', error);
-      toast({
-        title: "Error",
-        description: "Failed to load sales data. Please try again.",
-        variant: "destructive"
-      });
-    }
-  };
-
-  // Load data when user is authenticated
-  useEffect(() => {
-    if (user) {
-      const loadData = async () => {
-        setLoading(true);
-        await Promise.all([fetchProducts(), fetchSales()]);
-        setLoading(false);
-      };
-      
-      loadData();
-    } else {
-      setLoading(false);
-    }
-  }, [user]);
 
   // Listen for network status changes
   useEffect(() => {
@@ -169,19 +66,30 @@ export const ShopTracker = () => {
 
   // Calculate metrics
   const totalValue = products.reduce((sum, product) => 
-    sum + (product.currentStock * product.costPrice), 0
+    sum + (product.current_stock * product.cost_price), 0
   );
   
-  const todaysSales = sales.filter(sale => 
-    sale.date.toDateString() === new Date().toDateString()
-  ).reduce((sum, sale) => sum + sale.totalAmount, 0);
+  const todaysSales = sales.filter(sale => {
+    const saleDate = new Date(sale.date);
+    const today = new Date();
+    return saleDate.toDateString() === today.toDateString();
+  }).reduce((sum, sale) => sum + sale.total_amount, 0);
   
-  const todaysProfit = sales.filter(sale => 
-    sale.date.toDateString() === new Date().toDateString()
-  ).reduce((sum, sale) => sum + sale.profit, 0);
+  const todaysProfit = sales.filter(sale => {
+    const saleDate = new Date(sale.date);
+    const today = new Date();
+    return saleDate.toDateString() === today.toDateString();
+  }).reduce((sum, sale) => {
+    const profit = sale.items.reduce((itemSum, item) => {
+      const product = products.find(p => p.id === item.product_id);
+      const costPerItem = product ? product.cost_price : 0;
+      return itemSum + ((item.unit_price - costPerItem) * item.quantity);
+    }, 0);
+    return sum + profit;
+  }, 0);
 
   const lowStockProducts = products.filter(product => 
-    product.currentStock <= product.lowStockThreshold
+    product.current_stock <= (product.low_stock_threshold || 0)
   );
 
   if (loading) {
@@ -195,24 +103,7 @@ export const ShopTracker = () => {
     );
   }
 
-  if (!user) {
-    return (
-      <div className="min-h-screen bg-background p-4 max-w-md mx-auto flex items-center justify-center">
-        <Card className="shadow-receipt">
-          <CardContent className="p-6 text-center">
-            <Package className="w-12 h-12 mx-auto mb-4 text-primary" />
-            <h2 className="text-xl font-bold mb-2">Shop Tracker</h2>
-            <p className="text-muted-foreground mb-4">
-              Please sign in to access your shop data and manage your inventory.
-            </p>
-            <Button onClick={() => navigate('/auth')}>
-              Sign In
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
+  // No auth required for IndexedDB version
 
   return (
     <div className="min-h-screen bg-background p-4 max-w-md mx-auto">
@@ -233,16 +124,6 @@ export const ShopTracker = () => {
               {pendingSyncs} pending
             </Badge>
           )}
-          <Button 
-            variant="outline" 
-            size="sm"
-            onClick={async () => {
-              await supabase.auth.signOut();
-              toast({ title: "Signed Out", description: "You have been signed out successfully." });
-            }}
-          >
-            Sign Out
-          </Button>
         </div>
       </div>
 
@@ -254,7 +135,7 @@ export const ShopTracker = () => {
               <Package className="w-4 h-4 text-primary" />
               <div>
                 <p className="text-xs text-muted-foreground">Inventory Value</p>
-                <p className="font-receipt text-lg font-semibold">${totalValue.toFixed(2)}</p>
+                <p className="font-receipt text-lg font-semibold">KSh {totalValue.toFixed(2)}</p>
               </div>
             </div>
           </CardContent>
@@ -266,7 +147,7 @@ export const ShopTracker = () => {
               <DollarSign className="w-4 h-4 text-success" />
               <div>
                 <p className="text-xs text-muted-foreground">Today's Sales</p>
-                <p className="font-receipt text-lg font-semibold text-success">${todaysSales.toFixed(2)}</p>
+                <p className="font-receipt text-lg font-semibold text-success">KSh {todaysSales.toFixed(2)}</p>
               </div>
             </div>
           </CardContent>
@@ -288,7 +169,7 @@ export const ShopTracker = () => {
               {lowStockProducts.map(product => (
                 <div key={product.id} className="flex justify-between text-xs">
                   <span>{product.name}</span>
-                  <span className="font-receipt text-warning">{product.currentStock} left</span>
+                  <span className="font-receipt text-warning">{product.current_stock} left</span>
                 </div>
               ))}
             </div>
@@ -307,8 +188,30 @@ export const ShopTracker = () => {
 
         <TabsContent value="dashboard">
           <Dashboard 
-            products={products}
-            sales={sales}
+            products={products.map(p => ({
+              id: p.id,
+              name: p.name,
+              category: p.category || "",
+              currentStock: p.current_stock,
+              lowStockThreshold: p.low_stock_threshold || 0,
+              costPrice: p.cost_price,
+              sellingPrice: p.selling_price,
+              lastRestocked: undefined
+            }))}
+            sales={sales.map(s => ({
+              id: s.id,
+              productId: s.items[0]?.product_id || "",
+              productName: s.items[0]?.product_name || "",
+              quantity: s.items.reduce((sum, item) => sum + item.quantity, 0),
+              unitPrice: s.total_amount / s.items.reduce((sum, item) => sum + item.quantity, 1),
+              totalAmount: s.total_amount,
+              profit: s.items.reduce((sum, item) => {
+                const product = products.find(p => p.id === item.product_id);
+                const costPerItem = product ? product.cost_price : 0;
+                return sum + ((item.unit_price - costPerItem) * item.quantity);
+              }, 0),
+              date: new Date(s.date)
+            }))}
             totalValue={totalValue}
             todaysSales={todaysSales}
             todaysProfit={todaysProfit}
@@ -316,15 +219,56 @@ export const ShopTracker = () => {
         </TabsContent>
 
         <TabsContent value="restock">
-          <Restocking products={products} />
+          {productManager && stockManager ? (
+            <Restocking 
+              products={products} 
+              productManager={productManager}
+              stockManager={stockManager}
+              onProductsChange={refreshData}
+            />
+          ) : (
+            <Card className="shadow-receipt">
+              <CardContent className="p-6 text-center">
+                <Package className="w-8 h-8 animate-pulse mx-auto mb-2 text-primary" />
+                <p className="text-muted-foreground">Initializing stock management...</p>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         <TabsContent value="sales">
-          <Sales products={products} />
+          {productManager && salesManager ? (
+            <Sales 
+              products={products}
+              salesManager={salesManager}
+              productManager={productManager}
+              onSaleComplete={refreshData}
+            />
+          ) : (
+            <Card className="shadow-receipt">
+              <CardContent className="p-6 text-center">
+                <Package className="w-8 h-8 animate-pulse mx-auto mb-2 text-primary" />
+                <p className="text-muted-foreground">Initializing sales system...</p>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         <TabsContent value="reports">
-          <Reports sales={sales} />
+          <Reports sales={sales.map(s => ({
+            id: s.id,
+            productId: s.items[0]?.product_id || "",
+            productName: s.items[0]?.product_name || "",
+            quantity: s.items.reduce((sum, item) => sum + item.quantity, 0),
+            unitPrice: s.total_amount / s.items.reduce((sum, item) => sum + item.quantity, 1),
+            totalAmount: s.total_amount,
+            profit: s.items.reduce((sum, item) => {
+              const product = products.find(p => p.id === item.product_id);
+              const costPerItem = product ? product.cost_price : 0;
+              return sum + ((item.unit_price - costPerItem) * item.quantity);
+            }, 0),
+            date: new Date(s.date)
+          }))} />
         </TabsContent>
       </Tabs>
     </div>

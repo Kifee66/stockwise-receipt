@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,23 +8,19 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Package, Camera, FileText, Search } from "lucide-react";
-
-interface Product {
-  id: string;
-  name: string;
-  category: string;
-  currentStock: number;
-  lowStockThreshold: number;
-  costPrice: number;
-  sellingPrice: number;
-  lastRestocked?: Date;
-}
+import { ProductForm } from "./ProductForm";
+import { ProductManager } from "@/managers/ProductManager";
+import { StockManager } from "@/managers/StockManager";
+import { type Product } from "@/types/business";
 
 interface RestockingProps {
   products: Product[];
+  productManager: ProductManager;
+  stockManager: StockManager;
+  onProductsChange: () => void;
 }
 
-export const Restocking = ({ products }: RestockingProps) => {
+export const Restocking = ({ products, productManager, stockManager, onProductsChange }: RestockingProps) => {
   const { toast } = useToast();
   const [selectedProduct, setSelectedProduct] = useState<string>("");
   const [quantity, setQuantity] = useState<string>("");
@@ -32,16 +28,26 @@ export const Restocking = ({ products }: RestockingProps) => {
   const [notes, setNotes] = useState<string>("");
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [showNewProduct, setShowNewProduct] = useState(false);
-  const [newProductName, setNewProductName] = useState<string>("");
-  const [newProductCategory, setNewProductCategory] = useState<string>("");
+  const [categories, setCategories] = useState<string[]>([]);
+
+  // Load categories when products change
+  useEffect(() => {
+    const getCategories = async () => {
+      const result = await productManager.listCategories();
+      if (result.success) {
+        setCategories(result.data);
+      }
+    };
+    getCategories();
+  }, [products, productManager]);
 
   // Filter products based on search term
   const filteredProducts = products.filter(product =>
     product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    product.category.toLowerCase().includes(searchTerm.toLowerCase())
+    (product.category || "").toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const handleRestock = () => {
+  const handleRestock = async () => {
     if (!selectedProduct || !quantity || !costPrice) {
       toast({
         title: "Missing Information",
@@ -54,38 +60,52 @@ export const Restocking = ({ products }: RestockingProps) => {
     const product = products.find(p => p.id === selectedProduct);
     if (!product) return;
 
-    // Here you would normally update the database
-    toast({
-      title: "Stock Updated",
-      description: `Added ${quantity} units of ${product.name}`,
-    });
+    try {
+      const quantityNum = parseInt(quantity);
+      const costNum = parseFloat(costPrice);
+      
+      // Update stock
+      const stockResult = await productManager.updateStock(selectedProduct, quantityNum);
+      if (!stockResult.success) {
+        throw new Error(stockResult.error);
+      }
 
-    // Reset form
-    setSelectedProduct("");
-    setQuantity("");
-    setCostPrice("");
-    setNotes("");
+      // Record stock movement
+      const movementResult = await stockManager.logMovement({
+        product_id: selectedProduct,
+        quantity: quantityNum,
+        type: "restock",
+        notes: notes || null,
+      });
+
+      if (!movementResult.success) {
+        console.warn("Failed to record stock movement:", movementResult.error);
+      }
+
+      toast({
+        title: "Stock Updated",
+        description: `Added ${quantity} units of ${product.name}`,
+      });
+
+      onProductsChange();
+      
+      // Reset form
+      setSelectedProduct("");
+      setQuantity("");
+      setCostPrice("");
+      setNotes("");
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update stock",
+        variant: "destructive",
+      });
+    }
   };
 
-  const handleAddNewProduct = () => {
-    if (!newProductName || !newProductCategory) {
-      toast({
-        title: "Missing Information",
-        description: "Please enter product name and category",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    // Here you would normally add to database
-    toast({
-      title: "Product Added",
-      description: `${newProductName} has been added to inventory`,
-    });
-
+  const handleProductAdded = () => {
+    onProductsChange();
     setShowNewProduct(false);
-    setNewProductName("");
-    setNewProductCategory("");
   };
 
   return (
@@ -120,13 +140,13 @@ export const Restocking = ({ products }: RestockingProps) => {
               <SelectTrigger>
                 <SelectValue placeholder="Select a product" />
               </SelectTrigger>
-              <SelectContent>
+                  <SelectContent>
                 {filteredProducts.map((product) => (
                   <SelectItem key={product.id} value={product.id}>
                     <div className="flex justify-between w-full">
                       <span>{product.name}</span>
                       <Badge variant="outline" className="ml-2 font-receipt">
-                        {product.currentStock} in stock
+                        {product.current_stock} in stock
                       </Badge>
                     </div>
                   </SelectItem>
@@ -217,32 +237,12 @@ export const Restocking = ({ products }: RestockingProps) => {
           </Button>
 
           {showNewProduct && (
-            <Card className="bg-muted/30">
-              <CardContent className="p-4 space-y-3">
-                <Input
-                  placeholder="Product name"
-                  value={newProductName}
-                  onChange={(e) => setNewProductName(e.target.value)}
-                />
-                <Input
-                  placeholder="Category"
-                  value={newProductCategory}
-                  onChange={(e) => setNewProductCategory(e.target.value)}
-                />
-                <div className="flex gap-2">
-                  <Button onClick={handleAddNewProduct} size="sm" className="flex-1">
-                    Add Product
-                  </Button>
-                  <Button 
-                    variant="outline" 
-                    onClick={() => setShowNewProduct(false)} 
-                    size="sm"
-                  >
-                    Cancel
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+            <ProductForm
+              onClose={() => setShowNewProduct(false)}
+              onProductAdded={handleProductAdded}
+              productManager={productManager}
+              existingCategories={categories}
+            />
           )}
         </CardContent>
       </Card>
@@ -253,18 +253,18 @@ export const Restocking = ({ products }: RestockingProps) => {
           <CardTitle className="text-sm font-semibold text-warning">Items Needing Restock</CardTitle>
         </CardHeader>
         <CardContent>
-          {products.filter(p => p.currentStock <= p.lowStockThreshold).length > 0 ? (
+          {products.filter(p => p.current_stock <= (p.low_stock_threshold || 0)).length > 0 ? (
             <div className="space-y-2">
               {products
-                .filter(p => p.currentStock <= p.lowStockThreshold)
+                .filter(p => p.current_stock <= (p.low_stock_threshold || 0))
                 .map((product) => (
                   <div key={product.id} className="flex justify-between items-center py-2 border-b border-border last:border-b-0">
                     <div>
                       <p className="text-sm font-medium">{product.name}</p>
-                      <p className="text-xs text-muted-foreground">{product.category}</p>
+                      <p className="text-xs text-muted-foreground">{product.category || "Uncategorized"}</p>
                     </div>
                     <Badge variant="destructive" className="font-receipt">
-                      {product.currentStock} left
+                      {product.current_stock} left
                     </Badge>
                   </div>
                 ))}
