@@ -94,10 +94,11 @@ export const Restocking = ({ products, productManager, stockManager, onProductsC
       setQuantity("");
       setCostPrice("");
       setNotes("");
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
       toast({
         title: "Error",
-        description: error.message || "Failed to update stock",
+        description: msg || "Failed to update stock",
         variant: "destructive",
       });
     }
@@ -229,11 +230,6 @@ export const Restocking = ({ products, productManager, stockManager, onProductsC
           >
             <Plus className="w-4 h-4 mr-2" />
             Add New Product
-          </Button>
-
-          <Button variant="outline" className="w-full justify-start">
-            <FileText className="w-4 h-4 mr-2" />
-            Scan Receipt (Coming Soon)
           </Button>
 
           {showNewProduct && (

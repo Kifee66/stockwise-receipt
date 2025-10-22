@@ -7,6 +7,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from "@/hooks/use-toast";
 import { BarChart3, Download, Calendar as CalendarIcon, TrendingUp, DollarSign, Package } from "lucide-react";
+import { jsPDF } from "jspdf";
 import { format } from "date-fns";
 
 interface Sale {
@@ -32,18 +33,19 @@ export const Reports = ({ sales }: ReportsProps) => {
   // Calculate report data based on type
   const getReportData = () => {
     const now = new Date();
-    let startDate: Date;
-    let endDate = now;
+  let startDate: Date;
+  const endDate = now;
 
     switch (reportType) {
       case "daily":
         startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
         break;
-      case "weekly":
+      case "weekly": {
         const weekStart = new Date(now);
         weekStart.setDate(now.getDate() - now.getDay());
         startDate = weekStart;
         break;
+      }
       case "monthly":
         startDate = new Date(now.getFullYear(), now.getMonth(), 1);
         break;
@@ -98,10 +100,45 @@ export const Reports = ({ sales }: ReportsProps) => {
   const reportData = getReportData();
 
   const exportToPDF = () => {
-    toast({
-      title: "Export Coming Soon",
-      description: "PDF export functionality will be available soon",
-    });
+    try {
+      const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+      const margin = 40;
+      let y = 60;
+      doc.setFontSize(16);
+      doc.text(`Sales Report - ${reportData.periodName}`, margin, y);
+      y += 24;
+      doc.setFontSize(11);
+      doc.text(`Period: ${format(reportData.startDate, 'MMM d')} - ${format(reportData.endDate, 'MMM d, yyyy')}`, margin, y);
+      y += 20;
+
+      doc.setFontSize(12);
+      doc.text(`Total Revenue: KSh ${reportData.totalRevenue.toFixed(2)}`, margin, y);
+      y += 16;
+      doc.text(`Total Profit: KSh ${reportData.totalProfit.toFixed(2)}`, margin, y);
+      y += 20;
+
+      // Table header
+      doc.setFontSize(11);
+      doc.text('Item', margin, y);
+      doc.text('Qty', 360, y, { align: 'right' });
+      doc.text('Total', 520, y, { align: 'right' });
+      y += 16;
+
+      for (const s of reportData.sales) {
+        if (y > 780) { doc.addPage(); y = margin; }
+        doc.setFontSize(10);
+        doc.text(String(s.productName), margin, y);
+        doc.text(String(s.quantity), 360, y, { align: 'right' });
+        doc.text(`KSh ${s.totalAmount.toFixed(2)}`, 520, y, { align: 'right' });
+        y += 14;
+      }
+
+      const filename = `report_${reportData.periodName.toLowerCase()}_${new Date().toISOString().slice(0,10)}.pdf`;
+      doc.save(filename);
+    } catch (e) {
+      console.error('Report export failed', e);
+      toast({ title: 'Export Failed', description: 'Failed to create PDF' });
+    }
   };
 
   const emailReport = () => {
@@ -293,14 +330,41 @@ export const Reports = ({ sales }: ReportsProps) => {
           <CardTitle className="text-sm font-semibold">Export & Share</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          <Button onClick={exportToPDF} variant="outline" className="w-full justify-start">
-            <Download className="w-4 h-4 mr-2" />
-            Export as PDF
-          </Button>
-          <Button onClick={emailReport} variant="outline" className="w-full justify-start">
-            <CalendarIcon className="w-4 h-4 mr-2" />
-            Setup Auto Email Reports
-          </Button>
+          <div className="flex gap-2">
+            <Button onClick={exportToPDF} variant="outline" className="flex-1 justify-start">
+              <Download className="w-4 h-4 mr-2" />
+              Export as PDF
+            </Button>
+            <Button onClick={() => {
+              // build CSV from reportData.sales
+              try {
+                const rows = reportData.sales.map(s => ({
+                  id: s.id,
+                  productName: s.productName,
+                  quantity: s.quantity,
+                  unitPrice: s.unitPrice.toFixed(2),
+                  totalAmount: s.totalAmount.toFixed(2),
+                  profit: s.profit.toFixed(2),
+                  date: s.date.toISOString(),
+                }));
+                const headers = Object.keys(rows[0] || {});
+                const csv = [headers.join(',')].concat(rows.map(r => headers.map(h => String((r as Record<string, unknown>)[h] ?? '')).join(','))).join('\n');
+                const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `report_${reportData.periodName.toLowerCase()}_${new Date().toISOString().slice(0,10)}.csv`;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                URL.revokeObjectURL(url);
+              } catch (err) {
+                toast({ title: 'Export Failed', description: 'Failed to export CSV' });
+              }
+            }} variant="outline" className="flex-none justify-start">
+              CSV
+            </Button>
+          </div>
         </CardContent>
       </Card>
     </div>

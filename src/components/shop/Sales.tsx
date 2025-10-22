@@ -6,8 +6,9 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { ShoppingCart, Camera, Calculator, Search, DollarSign } from "lucide-react";
-import { type Product, type PaymentMethod } from "@/types/business";
+import { ShoppingCart, Camera, Calculator, Search, DollarSign, Printer } from "lucide-react";
+import { jsPDF } from "jspdf";
+import { type Product, type PaymentMethod, type Sale as StoredSale, type SaleItem as StoredSaleItem } from "@/types/business";
 import { SalesManager } from "@/managers/SalesManager";
 import { ProductManager } from "@/managers/ProductManager";
 
@@ -162,6 +163,274 @@ export const Sales = ({ products, salesManager, productManager, onSaleComplete }
         description: "An error occurred while processing the sale",
         variant: "destructive"
       });
+    }
+  };
+
+  // Export current cart or today's sales as a printable PDF via window.print()
+  type PrintableRow = { name: string; qty: number; unit: number; total: number; date?: string; saleId?: string };
+
+  const exportAsPdf = async () => {
+    try {
+      const salesToPrint: PrintableRow[] = [];
+
+      if (cart.length > 0) {
+        // populate from current cart
+        for (const item of cart) {
+          salesToPrint.push({
+            name: item.productName,
+            qty: item.quantity,
+            unit: item.unitPrice,
+            total: item.quantity * item.unitPrice,
+          });
+        }
+      } else if (salesManager) {
+        // fetch today's sales from IndexedDB via SalesManager
+        const start = new Date();
+        start.setHours(0, 0, 0, 0);
+        const end = new Date();
+        end.setHours(23, 59, 59, 999);
+        const res = await salesManager.salesByDateRange(start.toISOString(), end.toISOString());
+        if (res.success && res.data) {
+          for (const s of res.data as StoredSale[]) {
+            for (const it of s.items as StoredSaleItem[]) {
+              salesToPrint.push({
+                name: it.product_name,
+                qty: it.quantity,
+                unit: it.unit_price,
+                total: it.subtotal,
+                date: s.date,
+                saleId: s.id,
+              });
+            }
+          }
+        }
+      }
+
+      // Build printable HTML
+      const title = cart.length > 0 ? 'Current Sale Receipt' : `Sales Report - ${new Date().toLocaleDateString()}`;
+      const rowsHtml = salesToPrint.map(r => `
+        <tr>
+          <td style="padding:4px 8px;border-bottom:1px solid #ddd">${r.name}</td>
+          <td style="padding:4px 8px;border-bottom:1px solid #ddd;text-align:right">${r.qty}</td>
+          <td style="padding:4px 8px;border-bottom:1px solid #ddd;text-align:right">KSh ${Number(r.unit).toFixed(2)}</td>
+          <td style="padding:4px 8px;border-bottom:1px solid #ddd;text-align:right">KSh ${Number(r.total).toFixed(2)}</td>
+        </tr>
+      `).join('');
+
+      const totalAmount = cart.length > 0 ? cartTotal : salesToPrint.reduce((s, r) => s + Number(r.total || 0), 0);
+
+      // Generate PDF directly using jsPDF with styling, stock info and paging
+      try {
+        const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const pageHeight = doc.internal.pageSize.getHeight();
+        const margin = 40;
+        const usableWidth = pageWidth - margin * 2;
+        const lineHeight = 16;
+        const colWidths = { name: usableWidth * 0.40, category: usableWidth * 0.18, qty: usableWidth * 0.10, unit: usableWidth * 0.12, stock: usableWidth * 0.10, total: usableWidth * 0.10 };
+
+        let currentPage = 1;
+        const footer = (p: number, totalP: number) => {
+          doc.setFontSize(9);
+          doc.text(`Page ${p} of ${totalP}`, pageWidth - margin, pageHeight - 20, { align: 'right' });
+        };
+
+        const header = () => {
+          doc.setFontSize(16);
+          doc.text('StockWise Receipt', margin, 50);
+          doc.setFontSize(10);
+          doc.text(`Generated: ${new Date().toLocaleString()}`, margin, 66);
+          doc.setDrawColor(200);
+          doc.setLineWidth(0.5);
+          doc.line(margin, 72, pageWidth - margin, 72);
+        };
+
+        // Prepare rows with extra details (category, stock, cost/profit if available)
+        const rows = salesToPrint.map(r => {
+          const product = products.find(p => p.name === r.name) || null;
+          const category = product?.category ?? '';
+          const stockRemaining = product?.current_stock ?? undefined;
+          const cost = product?.cost_price ?? undefined;
+          const profit = (typeof cost === 'number') ? (r.total - (cost * r.qty)) : undefined;
+          return { ...r, category, stockRemaining, cost, profit };
+        });
+
+        // Pagination planning: estimate rows per page
+        const headerHeight = 90;
+        const footerHeight = 30;
+        const availableHeight = pageHeight - margin - headerHeight - footerHeight;
+        const rowsPerPage = Math.floor(availableHeight / lineHeight) - 2;
+        const totalPages = Math.max(1, Math.ceil(rows.length / rowsPerPage));
+
+        let y = margin + headerHeight;
+        header();
+        doc.setFontSize(11);
+        // Column titles
+        let x = margin;
+        doc.text('Item', x, y); x += colWidths.name;
+        doc.text('Category', x, y); x += colWidths.category;
+        doc.text('Qty', x, y); x += colWidths.qty;
+        doc.text('Unit', x, y); x += colWidths.unit;
+        doc.text('Stock', x, y); x += colWidths.stock;
+        doc.text('Total', x, y, { align: 'right' });
+        y += lineHeight;
+
+        let rowIndex = 0;
+        for (const r of rows) {
+          if (rowIndex > 0 && rowIndex % rowsPerPage === 0) {
+            // footer for current page
+            footer(currentPage, totalPages);
+            doc.addPage();
+            currentPage += 1;
+            header();
+            y = margin + headerHeight + lineHeight;
+            // reprint headers
+            x = margin;
+            doc.setFontSize(11);
+            doc.text('Item', x, y - lineHeight); x += colWidths.name;
+            doc.text('Category', x, y - lineHeight); x += colWidths.category;
+            doc.text('Qty', x, y - lineHeight); x += colWidths.qty;
+            doc.text('Unit', x, y - lineHeight); x += colWidths.unit;
+            doc.text('Stock', x, y - lineHeight); x += colWidths.stock;
+            doc.text('Total', x, y - lineHeight, { align: 'right' });
+          }
+
+          x = margin;
+          doc.setFontSize(10);
+          doc.text(String(r.name).slice(0, 40), x, y); x += colWidths.name;
+          doc.text(String(r.category || '').slice(0, 20), x, y); x += colWidths.category;
+          doc.text(String(r.qty), x, y); x += colWidths.qty;
+          doc.text(`KSh ${Number(r.unit).toFixed(2)}`, x, y, { align: 'right' }); x += colWidths.unit;
+          doc.text(r.stockRemaining !== undefined ? String(r.stockRemaining) : '-', x, y, { align: 'right' }); x += colWidths.stock;
+          doc.text(`KSh ${Number(r.total).toFixed(2)}`, pageWidth - margin, y, { align: 'right' });
+          y += lineHeight;
+          rowIndex += 1;
+        }
+
+        // Grand total on last page
+        if (y + 24 > pageHeight - footerHeight) { doc.addPage(); currentPage += 1; y = margin + headerHeight; }
+        doc.setFontSize(12);
+        doc.text(`Grand Total: KSh ${Number(totalAmount).toFixed(2)}`, margin, y + 12);
+        // footer
+        footer(currentPage, totalPages);
+
+        const filename = cart.length > 0 ? `receipt_${Date.now()}.pdf` : `sales_${new Date().toISOString().slice(0,10)}.pdf`;
+        doc.save(filename);
+        return;
+      } catch (pdfError) {
+        console.warn('jsPDF generation failed, falling back to print window', pdfError);
+        // fallback to previous print approach
+        const html = `
+          <html>
+            <head>
+              <title>${title}</title>
+              <style>
+                body { font-family: Arial, Helvetica, sans-serif; padding: 16px; color: #111 }
+                table { width:100%; border-collapse: collapse; margin-top: 12px }
+                th { text-align:left; padding:6px 8px; border-bottom:2px solid #222 }
+              </style>
+            </head>
+            <body>
+              <h2>${title}</h2>
+              <div>Generated: ${new Date().toLocaleString()}</div>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Item</th>
+                    <th style="text-align:right">Qty</th>
+                    <th style="text-align:right">Unit</th>
+                    <th style="text-align:right">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${rowsHtml || '<tr><td colspan="4" style="padding:8px;text-align:center">No items to print</td></tr>'}
+                </tbody>
+              </table>
+              <div style="margin-top:12px;font-weight:600">Grand Total: KSh ${Number(totalAmount).toFixed(2)}</div>
+            </body>
+          </html>
+        `;
+        const w = window.open('', '_blank', 'noopener,noreferrer');
+        if (!w) {
+          toast({ title: 'Popup blocked', description: 'Please allow popups to export as PDF', variant: 'destructive' });
+          return;
+        }
+        w.document.write(html);
+        w.document.close();
+        setTimeout(() => { w.focus(); w.print(); }, 300);
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error('Export error', e);
+      toast({ title: 'Export Failed', description: msg || 'Failed to export PDF', variant: 'destructive' });
+    }
+  };
+
+  const exportAsCsv = async () => {
+    try {
+      const rows: Array<Record<string, string | number | undefined>> = [];
+      if (cart.length > 0) {
+        for (const item of cart) {
+          const product = products.find(p => p.id === item.productId);
+          rows.push({
+            id: item.productId,
+            name: item.productName,
+            category: product?.category ?? '',
+            qty: item.quantity,
+            unit_price: item.unitPrice.toFixed(2),
+            cost_price: product?.cost_price ?? '',
+            stock_remaining: product?.current_stock ?? '',
+            total: (item.quantity * item.unitPrice).toFixed(2),
+            profit: product ? ((item.unitPrice - (product.cost_price)) * item.quantity).toFixed(2) : '',
+          });
+        }
+      } else if (salesManager) {
+        const start = new Date();
+        start.setHours(0,0,0,0);
+        const end = new Date();
+        end.setHours(23,59,59,999);
+        const res = await salesManager.salesByDateRange(start.toISOString(), end.toISOString());
+        if (res.success && res.data) {
+          for (const s of res.data as StoredSale[]) {
+            for (const it of s.items as StoredSaleItem[]) {
+              const product = products.find(p => p.id === it.product_id);
+              rows.push({
+                id: it.product_id,
+                name: it.product_name,
+                category: product?.category ?? '',
+                qty: it.quantity,
+                unit_price: it.unit_price.toFixed(2),
+                cost_price: product?.cost_price ?? '',
+                stock_remaining: product?.current_stock ?? '',
+                total: it.subtotal.toFixed(2),
+                profit: product ? ((it.unit_price - product.cost_price) * it.quantity).toFixed(2) : '',
+                sale_date: s.date,
+                sale_id: s.id,
+              });
+            }
+          }
+        }
+      }
+
+      if (rows.length === 0) {
+        toast({ title: 'No data', description: 'Nothing to export' });
+        return;
+      }
+
+      const headers = Object.keys(rows[0]);
+      const csv = [headers.join(',')].concat(rows.map(r => headers.map(h => String(r[h] ?? '')).join(','))).join('\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = cart.length > 0 ? `receipt_${Date.now()}.csv` : `sales_${new Date().toISOString().slice(0,10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('CSV export failed', err);
+      toast({ title: 'Export Failed', description: 'Failed to export CSV' });
     }
   };
 
@@ -337,6 +606,13 @@ export const Sales = ({ products, salesManager, productManager, onSaleComplete }
                 <DollarSign className="w-4 h-4 mr-2" />
                 Complete Sale
               </Button>
+              <Button onClick={exportAsPdf} variant="outline" className="flex-none">
+                <Printer className="w-4 h-4 mr-2" />
+                Export as PDF
+              </Button>
+              <Button onClick={exportAsCsv} variant="outline" className="flex-none">
+                CSV
+              </Button>
               <Button variant="outline" size="icon">
                 <Camera className="w-4 h-4" />
               </Button>
@@ -347,8 +623,11 @@ export const Sales = ({ products, salesManager, productManager, onSaleComplete }
 
       {/* Quick Sale Items */}
       <Card className="shadow-receipt">
-        <CardHeader className="pb-3">
+        <CardHeader className="pb-3 flex items-center justify-between">
           <CardTitle className="text-sm font-semibold">Available Products</CardTitle>
+          <Button onClick={exportAsPdf} variant="ghost" size="sm" className="ml-2">
+            <Printer className="w-4 h-4" />
+          </Button>
         </CardHeader>
         <CardContent>
           {availableProducts.length > 0 ? (

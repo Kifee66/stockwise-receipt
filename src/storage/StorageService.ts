@@ -26,29 +26,30 @@ const schemaMap: Partial<Record<StoreName, ZodTypeAny>> = {
 export class StorageService {
   constructor(private db: DatabaseManager) {}
 
-  private validate<T>(store: StoreName, payload: any): ServiceResponse<T> {
+  private validate<T>(store: StoreName, payload: unknown): ServiceResponse<T> {
     const schema = schemaMap[store];
     if (!schema) return { success: true, data: payload };
-    const parsed = (schema as ZodTypeAny).safeParse(payload);
+    const parsed = (schema as ZodTypeAny).safeParse(payload as unknown);
     if (!parsed.success) {
       return { success: false, error: parsed.error.errors.map(e => e.message).join(", ") };
     }
     return { success: true, data: parsed.data };
   }
 
-  async save<T>(store: StoreName, item: any): Promise<ServiceResponse<T>> {
+  async save<T>(store: StoreName, item: unknown): Promise<ServiceResponse<T>> {
     const validation = this.validate<T>(store, item);
     if (!validation.success) return validation;
 
     try {
       await this.db.withStore<IDBValidKey>(store, "readwrite", (os) => os.put(item));
       return { success: true, data: item as T };
-    } catch (e: any) {
-      return { success: false, error: e?.message ?? "Failed to save" };
+    } catch (e: unknown) {
+      const err = e as Error;
+      return { success: false, error: err?.message ?? "Failed to save" };
     }
   }
 
-  async saveMany<T>(store: StoreName, items: any[]): Promise<ServiceResponse<T[]>> {
+  async saveMany<T>(store: StoreName, items: unknown[]): Promise<ServiceResponse<T[]>> {
     // Validate all first for atomicity-like behavior
     for (const item of items) {
       const v = this.validate<T>(store, item);
@@ -64,8 +65,9 @@ export class StorageService {
         tx.onerror = () => reject(tx.error ?? new Error("Batch save failed"));
       });
       return { success: true, data: items as unknown as T[] };
-    } catch (e: any) {
-      return { success: false, error: e?.message ?? "Failed to save batch" };
+    } catch (e: unknown) {
+      const err = e as Error;
+      return { success: false, error: err?.message ?? "Failed to save batch" };
     }
   }
 
@@ -73,8 +75,9 @@ export class StorageService {
     try {
       const data = await this.db.withStore<T | undefined>(store, "readonly", (os) => os.get(id));
       return { success: true, data };
-    } catch (e: any) {
-      return { success: false, error: e?.message ?? "Failed to find" };
+    } catch (e: unknown) {
+      const err = e as Error;
+      return { success: false, error: err?.message ?? "Failed to find" };
     }
   }
 
@@ -82,8 +85,9 @@ export class StorageService {
     try {
       const data = await this.db.withStore<T[]>(store, "readonly", (os) => os.index(index).getAll(key));
       return { success: true, data };
-    } catch (e: any) {
-      return { success: false, error: e?.message ?? "Failed to query index" };
+    } catch (e: unknown) {
+      const err = e as Error;
+      return { success: false, error: err?.message ?? "Failed to query index" };
     }
   }
 
@@ -96,8 +100,9 @@ export class StorageService {
     try {
       const data = await this.db.withStore<T[]>(store, "readonly", (os) => os.getAll());
       return { success: true, data };
-    } catch (e: any) {
-      return { success: false, error: e?.message ?? "Failed to get all" };
+    } catch (e: unknown) {
+      const err = e as Error;
+      return { success: false, error: err?.message ?? "Failed to get all" };
     }
   }
 
@@ -105,8 +110,9 @@ export class StorageService {
     try {
       await this.db.withStore(store, "readwrite", (os) => os.delete(id));
       return { success: true, data: true };
-    } catch (e: any) {
-      return { success: false, error: e?.message ?? "Failed to delete" };
+    } catch (e: unknown) {
+      const err = e as Error;
+      return { success: false, error: err?.message ?? "Failed to delete" };
     }
   }
 
@@ -121,8 +127,9 @@ export class StorageService {
         tx.onerror = () => reject(tx.error ?? new Error("Batch delete failed"));
       });
       return { success: true, data: true };
-    } catch (e: any) {
-      return { success: false, error: e?.message ?? "Failed to delete batch" };
+    } catch (e: unknown) {
+      const err = e as Error;
+      return { success: false, error: err?.message ?? "Failed to delete batch" };
     }
   }
 }

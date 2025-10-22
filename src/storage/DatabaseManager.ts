@@ -76,7 +76,7 @@ export class DatabaseManager {
       };
 
       request.onerror = () => {
-        const err = request.error;
+        const err = request.error as Error | null;
         if (err && (err.name === "QuotaExceededError" || err.name.includes("Quota"))) {
           reject(new Error("Storage quota exceeded. Please free up space and try again."));
         } else {
@@ -101,15 +101,16 @@ export class DatabaseManager {
 
         req.onsuccess = () => resolve(req.result as T);
         req.onerror = () => {
-          const err = req.error;
-          if (err && (err.name === "QuotaExceededError" || err.name.includes("Quota"))) {
-            reject(new Error("Storage quota exceeded while performing operation."));
-          } else {
-            reject(err ?? new Error("IndexedDB operation failed"));
-          }
-        };
-      } catch (e: any) {
-        if (e?.name === "QuotaExceededError" || String(e?.name).includes("Quota")) {
+            const err = req.error as Error | null;
+            if (err && (err.name === "QuotaExceededError" || err.name.includes("Quota"))) {
+              reject(new Error("Storage quota exceeded while performing operation."));
+            } else {
+              reject(err ?? new Error("IndexedDB operation failed"));
+            }
+          };
+      } catch (e: unknown) {
+        const err = e as { name?: string };
+        if (err?.name === "QuotaExceededError" || String(err?.name).includes("Quota")) {
           reject(new Error("Storage quota exceeded while starting transaction."));
         } else {
           reject(e);
@@ -121,12 +122,12 @@ export class DatabaseManager {
   async estimateQuota(): Promise<QuotaEstimate> {
     if (navigator.storage && navigator.storage.estimate) {
       try {
-        // @ts-ignore - some browsers return usageDetails
-        const estimate = await navigator.storage.estimate();
+        type Estimate = { usage?: number; quota?: number; usageDetails?: Record<string, number> };
+        const estimate = await (navigator.storage as { estimate: () => Promise<Estimate> }).estimate();
         return {
           usage: estimate.usage,
           quota: estimate.quota,
-          usageDetails: (estimate as any).usageDetails,
+          usageDetails: estimate.usageDetails,
         };
       } catch (e) {
         return {};
