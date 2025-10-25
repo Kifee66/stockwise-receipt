@@ -120,7 +120,8 @@ export const Reports = ({ sales }: ReportsProps) => {
       // Table header
       doc.setFontSize(11);
       doc.text('Item', margin, y);
-      doc.text('Qty', 360, y, { align: 'right' });
+      doc.text('Date/Time', 240, y);
+      doc.text('Qty', 380, y, { align: 'right' });
       doc.text('Total', 520, y, { align: 'right' });
       y += 16;
 
@@ -128,7 +129,8 @@ export const Reports = ({ sales }: ReportsProps) => {
         if (y > 780) { doc.addPage(); y = margin; }
         doc.setFontSize(10);
         doc.text(String(s.productName), margin, y);
-        doc.text(String(s.quantity), 360, y, { align: 'right' });
+        doc.text(format(s.date, "MMM d, h:mm a"), 240, y);
+        doc.text(String(s.quantity), 380, y, { align: 'right' });
         doc.text(`KSh ${s.totalAmount.toFixed(2)}`, 520, y, { align: 'right' });
         y += 14;
       }
