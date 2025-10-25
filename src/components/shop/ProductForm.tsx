@@ -16,12 +16,10 @@ import { ProductManager, type NewProduct } from "@/managers/ProductManager";
 
 const productFormSchema = z.object({
   name: z.string().min(1, "Product name is required"),
-  sku: z.string().min(1, "SKU is required"),
-  barcode: z.string().optional(),
   category: z.string().optional(),
-  cost_price: z.number().min(0, "Cost price must be positive"),
-  selling_price: z.number().min(0, "Selling price must be positive"),
-  current_stock: z.number().int().min(0, "Current stock must be non-negative"),
+  cost_price: z.number().min(0, "Cost price must be positive").optional(),
+  selling_price: z.number().min(0, "Selling price must be positive").optional(),
+  current_stock: z.number().int().min(0, "Current stock must be non-negative").optional(),
   low_stock_threshold: z.number().int().min(0, "Low stock threshold must be non-negative"),
 });
 
@@ -39,17 +37,16 @@ export const ProductForm = ({ onClose, onProductAdded, productManager, existingC
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [customCategory, setCustomCategory] = useState("");
   const [showCustomCategory, setShowCustomCategory] = useState(false);
+  const [showCategorySection, setShowCategorySection] = useState(false);
 
   const form = useForm<ProductFormData>({
     resolver: zodResolver(productFormSchema),
     defaultValues: {
       name: "",
-      sku: "",
-      barcode: "",
       category: "",
-      cost_price: 0,
-      selling_price: 0,
-      current_stock: 0,
+      cost_price: undefined,
+      selling_price: undefined,
+      current_stock: undefined,
       low_stock_threshold: 5,
     },
   });
@@ -60,8 +57,6 @@ export const ProductForm = ({ onClose, onProductAdded, productManager, existingC
     try {
       const productData: NewProduct = {
         name: data.name,
-        sku: data.sku,
-        barcode: data.barcode || null,
         category: showCustomCategory ? customCategory : data.category || null,
         cost_price: data.cost_price,
         selling_price: data.selling_price,
@@ -120,113 +115,112 @@ export const ProductForm = ({ onClose, onProductAdded, productManager, existingC
       </CardHeader>
       <CardContent>
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
             {/* Basic Information */}
-            <div className="space-y-3">
-              <FormField
-                control={form.control}
-                name="name"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Product Name *</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Enter product name" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+            <FormField
+              control={form.control}
+              name="name"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Product Name *</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Enter product name" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
-              <FormField
-                control={form.control}
-                name="sku"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>SKU *</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Enter SKU (e.g., ABC-001)" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="barcode"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Barcode</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Enter barcode (optional)" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            {/* Category */}
-            <div className="space-y-2">
-              <Label>Category</Label>
-              {!showCustomCategory ? (
-                <div className="space-y-2">
-                  <FormField
-                    control={form.control}
-                    name="category"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormControl>
-                          <Select value={field.value} onValueChange={field.onChange}>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select category" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {existingCategories.map((category) => (
-                                <SelectItem key={category} value={category}>
-                                  {category}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+            {/* Category - Collapsible */}
+            {!showCategorySection ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowCategorySection(true)}
+                className="w-full justify-start text-muted-foreground hover:text-foreground -mt-1"
+              >
+                <Plus className="w-3 h-3 mr-1" />
+                Add Category (optional)
+              </Button>
+            ) : (
+              <div className="space-y-2 p-3 border rounded-lg bg-muted/30">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-medium">Category</Label>
                   <Button
                     type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setShowCustomCategory(true)}
-                    className="w-full"
-                  >
-                    <Plus className="w-3 h-3 mr-1" />
-                    Add New Category
-                  </Button>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <Input
-                    placeholder="Enter new category"
-                    value={customCategory}
-                    onChange={(e) => setCustomCategory(e.target.value)}
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
+                    variant="ghost"
                     size="sm"
                     onClick={() => {
+                      setShowCategorySection(false);
                       setShowCustomCategory(false);
                       setCustomCategory("");
+                      form.setValue("category", "");
                     }}
-                    className="w-full"
+                    className="h-6 px-2 text-xs"
                   >
-                    Use Existing Category
+                    <X className="w-3 h-3" />
                   </Button>
                 </div>
-              )}
-            </div>
+                {!showCustomCategory ? (
+                  <div className="space-y-2">
+                    <FormField
+                      control={form.control}
+                      name="category"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormControl>
+                            <Select value={field.value} onValueChange={field.onChange}>
+                              <SelectTrigger className="h-9">
+                                <SelectValue placeholder="Select category" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {existingCategories.map((category) => (
+                                  <SelectItem key={category} value={category}>
+                                    {category}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <Button
+                      type="button"
+                      variant="link"
+                      size="sm"
+                      onClick={() => setShowCustomCategory(true)}
+                      className="h-6 px-0 text-xs"
+                    >
+                      + New Category
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <Input
+                      placeholder="Enter new category"
+                      value={customCategory}
+                      onChange={(e) => setCustomCategory(e.target.value)}
+                      className="h-9"
+                    />
+                    <Button
+                      type="button"
+                      variant="link"
+                      size="sm"
+                      onClick={() => {
+                        setShowCustomCategory(false);
+                        setCustomCategory("");
+                      }}
+                      className="h-6 px-0 text-xs"
+                    >
+                      ← Use Existing
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Pricing */}
             <div className="grid grid-cols-2 gap-3">
@@ -242,7 +236,7 @@ export const ProductForm = ({ onClose, onProductAdded, productManager, existingC
                         step="0.01"
                         placeholder="0.00"
                         {...field}
-                        onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                        onChange={(e) => field.onChange(e.target.value === "" ? undefined : parseFloat(e.target.value))}
                       />
                     </FormControl>
                     <FormMessage />
@@ -262,7 +256,7 @@ export const ProductForm = ({ onClose, onProductAdded, productManager, existingC
                         step="0.01"
                         placeholder="0.00"
                         {...field}
-                        onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                        onChange={(e) => field.onChange(e.target.value === "" ? undefined : parseFloat(e.target.value))}
                       />
                     </FormControl>
                     <FormMessage />
@@ -296,7 +290,7 @@ export const ProductForm = ({ onClose, onProductAdded, productManager, existingC
                         type="number"
                         placeholder="0"
                         {...field}
-                        onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
+                        onChange={(e) => field.onChange(e.target.value === "" ? undefined : parseInt(e.target.value))}
                       />
                     </FormControl>
                     <FormMessage />

@@ -3,10 +3,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from "@/components/ui/command";
 import { useToast } from "@/hooks/use-toast";
-import { ShoppingCart, Camera, Calculator, Search, DollarSign, Printer } from "lucide-react";
+import { ShoppingCart, Camera, Calculator, DollarSign, Printer, Check, ChevronsUpDown, X, Percent, Plus } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { jsPDF } from "jspdf";
 import { type Product, type PaymentMethod, type Sale as StoredSale, type SaleItem as StoredSaleItem } from "@/types/business";
 import { SalesManager } from "@/managers/SalesManager";
@@ -31,18 +33,26 @@ export const Sales = ({ products, salesManager, productManager, onSaleComplete }
   const { toast } = useToast();
   const [selectedProduct, setSelectedProduct] = useState<string>("");
   const [quantity, setQuantity] = useState<string>("");
-  const [customPrice, setCustomPrice] = useState<string>("");
-  const [searchTerm, setSearchTerm] = useState<string>("");
+  const [discountedPrice, setDiscountedPrice] = useState<string>("");
   const [cart, setCart] = useState<SaleItem[]>([]);
+  const [open, setOpen] = useState(false);
+  const [showDiscount, setShowDiscount] = useState(false);
 
-  // Filter products based on search term and availability
-  const availableProducts = products.filter(product =>
-    product.current_stock > 0 &&
-    (product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-     (product.category || "").toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  // Filter products - only show items in stock
+  const availableProducts = products.filter(product => product.current_stock > 0);
 
   const selectedProductDetails = products.find(p => p.id === selectedProduct);
+
+  const calculateDiscountPercent = () => {
+    if (!selectedProductDetails || !discountedPrice) return "0";
+    const original = selectedProductDetails.selling_price;
+    const discounted = parseFloat(discountedPrice);
+    if (original && discounted && original > 0) {
+      const discount = ((original - discounted) / original) * 100;
+      return discount.toFixed(1);
+    }
+    return "0";
+  };
 
   const addToCart = () => {
     if (!selectedProduct || !quantity) {
@@ -67,10 +77,10 @@ export const Sales = ({ products, salesManager, productManager, onSaleComplete }
       return;
     }
 
-    const unitPrice = customPrice ? parseFloat(customPrice) : product.selling_price;
+    const unitPrice = discountedPrice ? parseFloat(discountedPrice) : product.selling_price;
 
     const existingItemIndex = cart.findIndex(item => item.productId === selectedProduct);
-    
+
     if (existingItemIndex >= 0) {
       const updatedCart = [...cart];
       updatedCart[existingItemIndex].quantity += qty;
@@ -89,7 +99,8 @@ export const Sales = ({ products, salesManager, productManager, onSaleComplete }
     // Reset form
     setSelectedProduct("");
     setQuantity("");
-    setCustomPrice("");
+    setDiscountedPrice("");
+    setShowDiscount(false);
     
     toast({
       title: "Added to Cart",
@@ -441,21 +452,6 @@ export const Sales = ({ products, salesManager, productManager, onSaleComplete }
 
   return (
     <div className="space-y-4">
-      {/* Search Bar */}
-      <Card className="shadow-receipt">
-        <CardContent className="p-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
-            <Input
-              placeholder="Search products to sell..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10"
-            />
-          </div>
-        </CardContent>
-      </Card>
-
       {/* Add to Cart Form */}
       <Card className="shadow-receipt">
         <CardHeader className="pb-3">
@@ -464,81 +460,178 @@ export const Sales = ({ products, salesManager, productManager, onSaleComplete }
             Add Sale Item
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-3">
+          {/* Product Selection with Combobox */}
           <div className="space-y-2">
-            <Label htmlFor="product">Product</Label>
-            <Select value={selectedProduct} onValueChange={setSelectedProduct}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select a product" />
-              </SelectTrigger>
-              <SelectContent>
-                {availableProducts.map((product) => (
-                  <SelectItem key={product.id} value={product.id}>
-                    <div className="flex justify-between w-full">
-                      <span>{product.name}</span>
-                      <div className="flex gap-1 ml-2">
-                        <Badge variant="outline" className="font-receipt text-xs">
-                          {product.current_stock} left
-                        </Badge>
-                        <Badge variant="secondary" className="font-receipt text-xs">
-                          KSh {product.selling_price}
+            <Label>Product *</Label>
+            <Popover open={open} onOpenChange={setOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={open}
+                  className="w-full justify-between font-normal"
+                >
+                  {selectedProduct
+                    ? (() => {
+                        const product = products.find((p) => p.id === selectedProduct);
+                        return (
+                          <div className="flex items-center justify-between w-full">
+                            <span>{product?.name}</span>
+                            <Badge variant="secondary" className="ml-2 font-receipt text-xs">
+                              KSh {product?.selling_price}
+                            </Badge>
+                          </div>
+                        );
+                      })()
+                    : "Select or search product..."}
+                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-full p-0" align="start">
+                <Command>
+                  <CommandInput placeholder="Search products..." />
+                  <CommandEmpty>No product found.</CommandEmpty>
+                  <CommandGroup className="max-h-64 overflow-auto">
+                    {availableProducts.map((product) => (
+                      <CommandItem
+                        key={product.id}
+                        value={product.name}
+                        onSelect={() => {
+                          setSelectedProduct(product.id);
+                          setOpen(false);
+                        }}
+                      >
+                        <Check
+                          className={cn(
+                            "mr-2 h-4 w-4",
+                            selectedProduct === product.id ? "opacity-100" : "opacity-0"
+                          )}
+                        />
+                        <div className="flex items-center justify-between flex-1">
+                          <span>{product.name}</span>
+                          <div className="flex gap-1 ml-2">
+                            <Badge variant="outline" className="font-receipt text-xs">
+                              {product.current_stock} left
+                            </Badge>
+                            <Badge variant="secondary" className="font-receipt text-xs">
+                              KSh {product.selling_price}
+                            </Badge>
+                          </div>
+                        </div>
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                </Command>
+              </PopoverContent>
+            </Popover>
+          </div>
+
+          {/* Quantity */}
+          <div className="space-y-2">
+            <Label htmlFor="quantity">Quantity *</Label>
+            <Input
+              id="quantity"
+              type="number"
+              placeholder="0"
+              value={quantity}
+              onChange={(e) => setQuantity(e.target.value)}
+              className="font-receipt"
+              max={selectedProductDetails?.current_stock || 0}
+            />
+            {selectedProductDetails && (
+              <p className="text-xs text-muted-foreground">
+                {selectedProductDetails.current_stock} available
+              </p>
+            )}
+          </div>
+
+          {/* Give Discount - Collapsible */}
+          {!showDiscount ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowDiscount(true)}
+              className="w-full justify-start text-muted-foreground hover:text-foreground -mt-1"
+            >
+              <Plus className="w-3 h-3 mr-1" />
+              Give Discount (optional)
+            </Button>
+          ) : (
+            <div className="space-y-2 p-3 border rounded-lg bg-muted/30">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-medium">Apply Discount</Label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setShowDiscount(false);
+                    setDiscountedPrice("");
+                  }}
+                  className="h-6 px-2 text-xs"
+                >
+                  <X className="w-3 h-3" />
+                </Button>
+              </div>
+              {selectedProductDetails && (
+                <div className="space-y-2">
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>Regular Price:</span>
+                    <span className="font-receipt">KSh {selectedProductDetails.selling_price.toFixed(2)}</span>
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="discountPrice" className="text-xs">Discounted Price (KSh)</Label>
+                    <Input
+                      id="discountPrice"
+                      type="number"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={discountedPrice}
+                      onChange={(e) => setDiscountedPrice(e.target.value)}
+                      className="h-9"
+                    />
+                  </div>
+                  {discountedPrice && parseFloat(discountedPrice) < selectedProductDetails.selling_price && (
+                    <div className="bg-destructive/10 p-2 rounded-lg">
+                      <div className="flex justify-between text-xs items-center">
+                        <span className="text-destructive">Discount:</span>
+                        <Badge variant="destructive" className="text-xs">
+                          <Percent className="w-3 h-3 mr-1" />
+                          {calculateDiscountPercent()}%
                         </Badge>
                       </div>
                     </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2">
-              <Label htmlFor="quantity">Quantity</Label>
-              <Input
-                id="quantity"
-                type="number"
-                placeholder="0"
-                value={quantity}
-                onChange={(e) => setQuantity(e.target.value)}
-                className="font-receipt"
-                max={selectedProductDetails?.current_stock || 0}
-              />
-              {selectedProductDetails && quantity && (
-                <p className="text-xs text-muted-foreground">
-                  {selectedProductDetails.current_stock} available
-                </p>
+                  )}
+                </div>
               )}
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="price">Custom Price (Optional)</Label>
-              <Input
-                id="price"
-                type="number"
-                step="0.01"
-                placeholder={selectedProductDetails?.selling_price.toFixed(2) || "0.00"}
-                value={customPrice}
-                onChange={(e) => setCustomPrice(e.target.value)}
-                className="font-receipt"
-              />
-            </div>
-          </div>
+          )}
 
           {selectedProductDetails && quantity && (
             <div className="bg-muted/50 p-3 rounded-lg">
               <div className="space-y-1 text-sm">
                 <div className="flex justify-between">
                   <span>Subtotal:</span>
-                  <span className="font-receipt">
-                    KSh {((parseFloat(quantity) || 0) * 
-                        (customPrice ? parseFloat(customPrice) : selectedProductDetails.selling_price)
-                      ).toFixed(2)}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    {discountedPrice && parseFloat(discountedPrice) < selectedProductDetails.selling_price && (
+                      <span className="font-receipt text-xs line-through text-muted-foreground">
+                        KSh {((parseFloat(quantity) || 0) * selectedProductDetails.selling_price).toFixed(2)}
+                      </span>
+                    )}
+                    <span className="font-receipt">
+                      KSh {((parseFloat(quantity) || 0) *
+                          (discountedPrice ? parseFloat(discountedPrice) : selectedProductDetails.selling_price)
+                        ).toFixed(2)}
+                    </span>
+                  </div>
                 </div>
                 <div className="flex justify-between text-success">
                   <span>Profit:</span>
                   <span className="font-receipt">
-                    KSh {((parseFloat(quantity) || 0) * 
-                        ((customPrice ? parseFloat(customPrice) : selectedProductDetails.selling_price) - 
+                    KSh {((parseFloat(quantity) || 0) *
+                        ((discountedPrice ? parseFloat(discountedPrice) : selectedProductDetails.selling_price) -
                          selectedProductDetails.cost_price)
                       ).toFixed(2)}
                   </span>

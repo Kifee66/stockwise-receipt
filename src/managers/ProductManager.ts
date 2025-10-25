@@ -4,22 +4,33 @@ import { productSchema } from "@/types/business";
 
 function nowISO() { return new Date().toISOString(); }
 function uuid(): UUID { return (globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2)) as UUID; }
+function generateSKU(): string {
+  const timestamp = Date.now();
+  const random = Math.random().toString(36).substring(2, 6).toUpperCase();
+  return `SKU-${timestamp}-${random}`;
+}
 
-export type NewProduct = Omit<Product, "id" | "created_at" | "updated_at"> & { id?: UUID };
+export type NewProduct = Omit<Product, "id" | "sku" | "cost_price" | "selling_price" | "current_stock" | "created_at" | "updated_at"> & {
+  id?: UUID;
+  sku?: string;
+  cost_price?: number;
+  selling_price?: number;
+  current_stock?: number;
+};
 
 export class ProductManager {
   constructor(private storage: StorageService) {}
 
   async addProduct(input: NewProduct) {
-    // Required: name, SKU, price
+    // Auto-generate SKU if not provided
     const draft: Product = {
       id: input.id ?? uuid(),
       name: input.name,
-      sku: input.sku,
+      sku: input.sku ?? generateSKU(),
       barcode: input.barcode ?? null,
       category: input.category ?? null,
-      cost_price: input.cost_price,
-      selling_price: input.selling_price,
+      cost_price: input.cost_price ?? 0,
+      selling_price: input.selling_price ?? 0,
       current_stock: input.current_stock ?? 0,
       low_stock_threshold: input.low_stock_threshold ?? 0,
       created_at: nowISO(),
@@ -99,11 +110,11 @@ export class ProductManager {
     const items = drafts.map(d => ({
       id: d.id ?? uuid(),
       name: d.name,
-      sku: d.sku,
+      sku: d.sku ?? generateSKU(),
       barcode: d.barcode ?? null,
       category: d.category ?? null,
-      cost_price: d.cost_price,
-      selling_price: d.selling_price,
+      cost_price: d.cost_price ?? 0,
+      selling_price: d.selling_price ?? 0,
       current_stock: d.current_stock ?? 0,
       low_stock_threshold: d.low_stock_threshold ?? 0,
       created_at: now,
